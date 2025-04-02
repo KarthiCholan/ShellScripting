@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Set retention period (in days)
+RETENTION_DAYS=30
+
+# Get all RDS instances
+RDS_INSTANCES=$(aws rds describe-db-instances --query "DBInstances[*].DBInstanceIdentifier" --output text)
+
+for INSTANCE in $RDS_INSTANCES; do
+    TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)
+    SNAPSHOT_ID="$INSTANCE-snapshot-$TIMESTAMP"
+    
+    aws rds create-db-snapshot --db-instance-identifier $INSTANCE --db-snapshot-identifier $SNAPSHOT_ID
+    echo "Created RDS snapshot: $SNAPSHOT_ID for instance: $INSTANCE"
+done
+
+# Delete old snapshots
+OLD_SNAPSHOTS=$(aws rds describe-db-snapshots --query "DBSnapshots[?SnapshotCreateTime<=`$(date -d "-$RETENTION_DAYS days" --utc +%Y-%m-%dT%H:%M:%SZ)`].DBSnapshotIdentifier" --output text)
+
+for SNAPSHOT in $OLD_SNAPSHOTS; do
+    echo "Deleting old RDS snapshot: $SNAPSHOT"
+    aws rds delete-db-snapshot --db-snapshot-identifier $SNAPSHOT
+done
