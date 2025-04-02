@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Set retention period (in days)
+RETENTION_DAYS=30
+
+# Get all running EC2 instance IDs
+INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" \
+    --query "Reservations[*].Instances[*].InstanceId" --output text)
+
+for INSTANCE_ID in $INSTANCE_IDS; do
+    TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)
+    AMI_ID=$(aws ec2 create-image --instance-id $INSTANCE_ID --name "Backup-$INSTANCE_ID-$TIMESTAMP" --no-reboot --output text)
+    
+    echo "Created AMI snapshot: $AMI_ID for instance: $INSTANCE_ID"
+done
+
+# Delete AMIs older than retention period
+OLD_AMIS=$(aws ec2 describe-images --owners self --query "Images[?CreationDate<=`$(date -d "-$RETENTION_DAYS days" --utc +%Y-%m-%dT%H:%M:%SZ)`].ImageId" --output text)
+
+for AMI in $OLD_AMIS; do
+    echo "Deregistering old AMI: $AMI"
+    aws ec2 deregister-image --image-id $AMI
+done
