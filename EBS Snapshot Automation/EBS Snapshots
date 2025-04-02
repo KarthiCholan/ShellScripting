@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Set retention period (in days)
+RETENTION_DAYS=30
+
+# Get all attached EBS volumes
+VOLUME_IDS=$(aws ec2 describe-volumes --filters "Name=status,Values=in-use" --query "Volumes[*].VolumeId" --output text)
+
+for VOLUME_ID in $VOLUME_IDS; do
+    TIMESTAMP=$(date +%Y-%m-%d-%H-%M-%S)
+    SNAPSHOT_ID=$(aws ec2 create-snapshot --volume-id $VOLUME_ID --description "Backup-$VOLUME_ID-$TIMESTAMP" --query "SnapshotId" --output text)
+    
+    echo "Created EBS snapshot: $SNAPSHOT_ID for volume: $VOLUME_ID"
+done
+
+# Delete old snapshots
+OLD_SNAPSHOTS=$(aws ec2 describe-snapshots --owner-ids self --query "Snapshots[?StartTime<=`$(date -d "-$RETENTION_DAYS days" --utc +%Y-%m-%dT%H:%M:%SZ)`].SnapshotId" --output text)
+
+for SNAPSHOT in $OLD_SNAPSHOTS; do
+    echo "Deleting old EBS snapshot: $SNAPSHOT"
+    aws ec2 delete-snapshot --snapshot-id $SNAPSHOT
+done
